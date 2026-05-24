@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "homepage": "https://lermrover-hub.github.io/boat-paintquoat-app",
+  "homepage": "https://lermrover-hub.github.io/boat-painting-quote-app",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
