@@ -88,6 +88,21 @@ export interface Settings {
   defaultQuotationNote: string;
 }
 
+export interface PhotoAreaEstimate {
+  imageName: string;
+  actualLengthMeters: number;
+  surfaceMultiplier: number;
+  imageWidth: number;
+  imageHeight: number;
+  detectedWidthPixels: number;
+  detectedHeightPixels: number;
+  detectedPixelCount: number;
+  profileArea: number;
+  estimatedSurfaceArea: number;
+  confidence: "Low" | "Medium" | "High";
+  createdAt: string;
+}
+
 export interface BoatCalculation {
   id: string;
   createdAt: string;
@@ -111,6 +126,7 @@ export interface BoatCalculation {
   selectedAreas: SelectedAreas;
   calculatedAreas: AreaValues;
   manualOverrides: ManualOverrides;
+  photoEstimate?: PhotoAreaEstimate;
   factors: Factors;
   actualArea: number;
   chargeableArea: number;

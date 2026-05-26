@@ -27,6 +27,10 @@ export const seedRateCards = (): RateCardItem[] => {
     ["Primer Application", "Primer", "sq.m.", 450, 1, true],
     ["Topcoat Application", "Topcoat", "sq.m.", 900, 1, true],
     ["Non-skid Deck Paint", "Non-skid", "sq.m.", 750, 1, true],
+    ["Machine Polishing - Light Oxidation", "Polish", "sq.m.", 350, 1, true],
+    ["Machine Polishing - Heavy Oxidation", "Polish", "sq.m.", 650, 1, true],
+    ["Wax / Sealant Protection", "Polish", "sq.m.", 220, 1, true],
+    ["Stainless and Metal Polish", "Polish", "job", 1800, 1, false],
     ["Consumables", "Consumables", "job", 1500, 1, false],
     ["Masking", "Masking", "meter", 80, 1, false],
     ["Project Management Fee", "Management Fee", "job", 2500, 1, false]
@@ -83,6 +87,7 @@ export const createBlankCalculation = (settings: Settings): BoatCalculation => {
     },
     calculatedAreas: areas,
     manualOverrides: {},
+    photoEstimate: undefined,
     factors: {
       conditionFactor: 1,
       accessFactor: 1,

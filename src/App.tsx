@@ -10,16 +10,18 @@ import {
   Save,
   Settings as SettingsIcon,
   SlidersHorizontal,
-  Trash2
+  Trash2,
+  Upload
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createBlankCalculation, defaultSettings, makeId, sampleCalculation, seedRateCards } from "./data/seeds";
 import { useLocalStorage } from "./hooks/useLocalStorage";
 import type { AreaKey, BoatCalculation, BoatType, QuoteItem, RateCardItem, Settings } from "./types";
 import { boatTypes, rateCategories, units } from "./types";
 import { areaLabels, emptyAreas, getEffectiveArea, recalculateBoat } from "./utils/calculations";
 import { formatCurrency, formatNumber } from "./utils/format";
+import { estimateBoatAreaFromImage } from "./utils/photoEstimator";
 import { Button, Card, Field, NumberInput, PageTitle, inputClass } from "./components/ui";
 
 type Page = "dashboard" | "boat" | "saved" | "rates" | "cost" | "settings" | "quote";
@@ -39,6 +41,18 @@ export function App() {
     () => calculations.find((calc) => calc.id === activeId) ?? calculations[0],
     [activeId, calculations]
   );
+
+  const rateCardsWithCurrentSeeds = useMemo(() => {
+    const existingNames = new Set(rateCards.map((item) => item.name));
+    const missingSeeds = seedRateCards().filter((item) => !existingNames.has(item.name));
+    return missingSeeds.length ? [...rateCards, ...missingSeeds] : rateCards;
+  }, [rateCards]);
+
+  useEffect(() => {
+    if (rateCardsWithCurrentSeeds.length !== rateCards.length) {
+      setRateCards(rateCardsWithCurrentSeeds);
+    }
+  }, [rateCards.length, rateCardsWithCurrentSeeds, setRateCards]);
 
   const saveCalculation = (next: BoatCalculation) => {
     const recalculated = recalculateBoat(next);
@@ -109,12 +123,12 @@ export function App() {
       case "boat":
         return <BoatCalculationPage calc={activeCalculation!} onChange={saveCalculation} onNext={() => setPage("cost")} />;
       case "rates":
-        return <RateCardPage rateCards={rateCards} onSave={updateRate} onDelete={removeRate} />;
+        return <RateCardPage rateCards={rateCardsWithCurrentSeeds} onSave={updateRate} onDelete={removeRate} />;
       case "cost":
         return (
           <CostCalculatorPage
             calc={activeCalculation!}
-            rateCards={rateCards}
+            rateCards={rateCardsWithCurrentSeeds}
             onChange={saveCalculation}
             onQuote={() => setPage("quote")}
           />
@@ -230,8 +244,35 @@ function BoatCalculationPage({
   onChange: (calc: BoatCalculation) => void;
   onNext: () => void;
 }) {
+  const [photoLength, setPhotoLength] = useState(calc.loa || 0);
+  const [photoMultiplier, setPhotoMultiplier] = useState(2);
+  const [photoError, setPhotoError] = useState("");
+  const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
   const patch = (partial: Partial<BoatCalculation>) => onChange({ ...calc, ...partial });
   const setNumber = (key: keyof BoatCalculation, value: number) => patch({ [key]: Number.isFinite(value) ? value : 0 } as Partial<BoatCalculation>);
+  const analyzePhoto = async (file: File | undefined) => {
+    if (!file) return;
+    setPhotoError("");
+    setIsAnalyzingPhoto(true);
+    try {
+      const estimate = await estimateBoatAreaFromImage(file, photoLength || calc.loa, photoMultiplier);
+      patch({ photoEstimate: estimate });
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : "Could not analyze this image.");
+    } finally {
+      setIsAnalyzingPhoto(false);
+    }
+  };
+  const applyPhotoEstimate = () => {
+    if (!calc.photoEstimate) return;
+    patch({
+      selectedAreas: { ...calc.selectedAreas, manualExtra: true },
+      manualOverrides: {
+        ...calc.manualOverrides,
+        manualExtra: Number(calc.photoEstimate.estimatedSurfaceArea.toFixed(2))
+      }
+    });
+  };
 
   return (
     <>
@@ -301,6 +342,48 @@ function BoatCalculationPage({
               </div>
             ))}
           </div>
+        </Card>
+
+        <Card>
+          <h2 className="mb-1 text-lg font-bold">Photo Area Estimator</h2>
+          <p className="mb-3 text-sm text-slate-500">
+            Upload a JPEG/PNG side-view photo. The app estimates visible boat profile area from the real LOA scale, then multiplies it into approximate paintable surface area.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Real boat length for photo scale (m)">
+              <NumberInput value={photoLength} onChange={setPhotoLength} />
+            </Field>
+            <Field label="Surface multiplier">
+              <NumberInput value={photoMultiplier} onChange={setPhotoMultiplier} />
+            </Field>
+            <Field label="Boat photo JPEG/PNG">
+              <input
+                accept="image/jpeg,image/png"
+                className={inputClass}
+                type="file"
+                onChange={(event) => analyzePhoto(event.target.files?.[0])}
+              />
+            </Field>
+          </div>
+          {photoError ? <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{photoError}</p> : null}
+          {isAnalyzingPhoto ? <p className="mt-3 text-sm font-semibold text-slate-600">Analyzing photo...</p> : null}
+          {calc.photoEstimate ? (
+            <div className="mt-4 grid gap-3">
+              <div className="grid grid-cols-2 gap-3">
+                <SummaryTile label="Visible profile" value={`${formatNumber(calc.photoEstimate.profileArea)} sq.m.`} />
+                <SummaryTile label="Estimated surface" value={`${formatNumber(calc.photoEstimate.estimatedSurfaceArea)} sq.m.`} strong />
+              </div>
+              <p className="text-sm text-slate-600">
+                Image: {calc.photoEstimate.imageName} / detected width {formatNumber(calc.photoEstimate.detectedWidthPixels)} px / confidence {calc.photoEstimate.confidence}
+              </p>
+              <Button className="flex items-center justify-center gap-2" onClick={applyPhotoEstimate}>
+                <Upload size={16} /> Use as Manual Extra Area
+              </Button>
+              <p className="text-xs text-slate-500">
+                This is an estimating aid only. Best results need a side-view photo, minimal perspective distortion, and a clean background.
+              </p>
+            </div>
+          ) : null}
         </Card>
 
         <Card>
